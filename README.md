@@ -32,3 +32,105 @@ https://asciinema.org/a/CtoOcDP9dnddwXkeEb9SuMHKV
 - check git 'pipeline' results                                                                                             
 - here we go;) 
 
+
+<br><br>
+# Task 5.2 - prometheus GCP kubernetes + Uptimerobot
+
+- steps:
+
+	- `gcloud beta interactive`
+	- `gcloud config get-value project`
+		- `gcloud config set project prometheus-407701`
+
+	- create GCP repo if needed	
+		- `gcloud services enable artifactregistry.googleapis.com`
+		- `gcloud artifacts repositories create "prometheus-eu" --repository-format=docker --location="europe" --description="prometheus location=europe"`
+		- `gcloud artifacts repositories list`
+		- `gcloud artifacts packages list --repository prometheus-eu --location europe`
+		- ? if needed: `gcloud auth configure-docker europe-docker.pkg.dev`
+		- 
+
+	- create and push image - use bash webserver `while|ncd`
+		- multiplatform!
+			- `docker buildx create --use --platform linux/386,linux/amd64,linux/arm64 --name multiplatform-builder2`
+			- `docker buildx inspect --bootstrap`
+			- `docker buildx build --platform linux/386,linux/amd64,linux/arm64 --tag europe-docker.pkg.dev/prometheus-407701/prometheus-eu/prometheus-bash-webserver-test:v1.0.0 --push .`
+			- check: 
+				- `gcloud artifacts tags list --package prometheus-bash-webserver-test --repository prometheus-eu --location europe`
+			- test on gcp: 
+				- `docker run -ti -p 8080:8080 europe-docker.pkg.dev/prometheus-407701/prometheus-eu/prometheus-bash-webserver-test:v0.0.11`
+		
+	- create cluster and run deployment:						
+		- create cluster
+			- `gcloud container clusters create prometheus-uptimerobot1 --machine-type=e2-small --num-nodes=2 --total-max-nodes=2 --max-nodes=2 --zone=europe-central2-a --disk-size=40GB`
+			- `gcloud container clusters list`
+		- prepare env 
+			- `gcloud container clusters get-credentials prometheus-uptimerobot --zone=europe-central2-a` // set kubeconfig
+			- `k get all -A` // check all is good
+			- `k create ns prometheus-uptimerobot`
+			- `k config set-context --current --namespace prometheus-uptimerobot` // switch context
+		- test image 
+			- `k run testuptimerobot1 --image=europe-docker.pkg.dev/prometheus-407701/prometheus-eu/prometheus-bash-webserver-test:v1.0.0`
+		- create deployment:
+			- `k create deploy app-v1 --image europe-docker.pkg.dev/prometheus-407701/prometheus-eu/prometheus-bash-webserver-test:v1.0.0` 
+		- create service
+			- `k expose deploy app-v1 --port 80 --type LoadBalancer --target-port 8080`
+			- wait for external IP assigning
+				- `k get svc -w` // wait for external IP
+			- `LB=$(k get svc app-v1 -o jsonpath="{..ingress[0].ip}") && echo $LB && curl $LB`
+
+	- in docker image change version and push new image
+		- check new image is used by cluster
+			- `while true; do curl $LB; sleep 0.3; done`			
+
+		- update image
+			- change version in Dockerfile
+			- `docker buildx build --platform linux/386,linux/amd64,linux/arm64 --tag europe-docker.pkg.dev/prometheus-407701/prometheus-eu/prometheus-bash-webserver-test:v0.0.12 --push .`
+			- `gcloud artifacts tags list --package prometheus-bash-webserver-test --repository prometheus-eu --location europe`
+			- get pod name: 
+				- `k get pod`
+			- get container name: 
+				- `echo $(kubectl get pods demo1-59567ff59f-mtttg -o jsonpath='{.spec.containers[*].name}')`
+			- set new image for pod container
+				- `k set image deployment/demo1 prometheus-bash-webserver-test=europe-docker.pkg.dev/prometheus-407701/prometheus-eu/prometheus-bash-webserver-test:v0.0.12`
+				- `k annotate deployment/demo1 kubernetes.io/change-cause="update to v0.0.12" --overwrite=true`
+			- check history
+				- `k rollout history deployment/demo1`
+			- rollback	
+				- `k rollout undo deploy/demo1 --to-revision 1`
+		
+	- test labels
+		- `k create deploy app-v2 --image europe-docker.pkg.dev/prometheus-407701/prometheus-eu/prometheus-bash-webserver-test:v2.0.0`
+		- `k get po --show-labels`
+		- `k get svc -o wide`
+		- `k get po -l app=app-v1`
+		- set label for all pods
+			- `k label po --all run=demo1`
+			- delete label if needed `k label po --all run-`
+		- update service
+			- `k edit svc`
+				- change `app: demo1` to `run: demo`
+				- see changes in `while true; do curl $LB; sleep 0.3; done`
+
+	- emulate canary 
+		- 1 = demo1=50%, demo2=50%
+		
+		- 2 = demo1=90%, demo2=10%
+			- `k scale deploy app-v1 --replicas 9 && k get po -w --show-labels`
+			- `k get po -Lapp,run`
+			- `k label po --all run=demo`
+			- `k get po -Lapp,run`
+		- 3 = demo1=0%, demo2=100%
+			- `k scale deploy demo1 --replicas 0 && k get po -w --show-labels`
+			- `k get po -Lapp,run`
+
+	- clean
+		- `obs`
+		- `gcloud container clusters list`
+		
+
+
+
+
+
+

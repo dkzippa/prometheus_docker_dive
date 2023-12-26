@@ -1,0 +1,10 @@
+# registries.yaml 
+mirrors:
+  europe-west2-docker.pkg.dev:
+    endpoint:
+    - "https://europe-west2-docker.pkg.dev"
+configs:
+  europe-west2-docker.pkg.dev:
+    auth:
+      username: _json_key
+      password: '...'
