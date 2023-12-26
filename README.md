@@ -34,7 +34,7 @@ https://asciinema.org/a/CtoOcDP9dnddwXkeEb9SuMHKV
 
 
 <br><br>
-# Task 5.2 - prometheus GCP kubernetes + Uptimerobot
+# Task 5.2 - prometheus bash web server on GCP GKE + Uptimerobot
 
 - steps:
 
