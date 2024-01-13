@@ -1,4 +1,7 @@
-# Implement DIVE in pipleine                                                                                               
+# Implement DIVE in pipleine                                   
+
+https://github.com/dkzippa/prometheus_docker_dive
+
 
 https://asciinema.org/a/CtoOcDP9dnddwXkeEb9SuMHKV
 
@@ -129,8 +132,14 @@ https://asciinema.org/a/CtoOcDP9dnddwXkeEb9SuMHKV
 		- `gcloud container clusters list`
 		
 
+# Add build and push docker image to DockerHub from Makefile
 
+#### It uses:
+1) git tag and commit hash for the version 
+2) git repo name for image name in DockerHub
+3) check Makefile vars
 
-
+- `make image` 
+- `push image`
 
 
